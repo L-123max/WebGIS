@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>美国城市人口变迁 · 1790－2000 (年份选择)</title>
+    
+    <!-- ArcGIS Maps SDK for JavaScript 4.32 -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.32/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.32/"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Roboto', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #1a1e24;
+        }
+
+        /* 区域1：页眉 */
+        .app-header {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: white;
+            padding: 14px 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #f39c12;
+            flex-wrap: wrap;
+        }
+        .app-header h1 {
+            font-size: 1.8rem;
+            font-weight: 500;
+            letter-spacing: 1px;
+        }
+        .app-header h1 i {
+            color: #f39c12;
+            margin-right: 10px;
+        }
+        .app-header .subtitle {
+            font-size: 1rem;
+            opacity: 0.85;
+        }
+        .app-header .badge {
+            background: #f39c12;
+            color: #1a1e24;
+            padding: 6px 16px;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        /* 年份选择器样式 */
+        .year-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.15);
+            padding: 6px 15px;
+            border-radius: 30px;
+        }
+        .year-selector label {
+            font-weight: 500;
+            color: #f39c12;
+        }
+        .year-selector select {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: none;
+            outline: none;
+            background: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 主容器 */
+        .main-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* 区域2：地图容器 */
+        .map-area {
+            flex: 1;
+            position: relative;
+        }
+        #viewDiv {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 区域3：底图库侧边栏 */
+        .basemap-sidebar {
+            width: 320px;
+            background: rgba(30, 40, 50, 0.92);
+            backdrop-filter: blur(10px);
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 18px 14px;
+            overflow-y: auto;
+            color: #e0e0e0;
+            box-shadow: -4px 0 15px rgba(0,0,0,0.2);
+        }
+        .basemap-sidebar h3 {
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+            color: #f39c12;
+            border-left: 5px solid #f39c12;
+            padding-left: 14px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        /* 自定义控件（悬浮搜索+定位） */
+        .map-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            gap: 12px;
+        }
+        .search-box {
+            background: white;
+            border-radius: 40px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            display: flex;
+            align-items: center;
+            padding: 4px 6px;
+        }
+        .search-box input {
+            border: none;
+            outline: none;
+            padding: 10px 14px;
+            width: 200px;
+            font-size: 14px;
+            border-radius: 40px;
+            background: transparent;
+        }
+        .search-box button {
+            background: #f39c12;
+            border: none;
+            color: white;
+            padding: 8px 18px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .search-box button:hover {
+            background: #e08e0b;
+            transform: scale(1.02);
+        }
+        .locate-btn {
+            background: white;
+            border: none;
+            border-radius: 40px;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: 0.2s;
+            color: #2c5364;
+        }
+        .locate-btn:hover {
+            background: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; }
+            .basemap-sidebar { width: 100%; height: 150px; }
+            .search-box input { width: 140px; }
+            .app-header h1 { font-size: 1.2rem; }
+            .year-selector { margin-top: 8px; }
+        }
+
+        /* 微件样式 */
+        .esri-legend {
+            background: rgba(255,255,255,0.95) !important;
+            border-radius: 8px !important;
+            padding: 8px !important;
+        }
+        .esri-layer-list {
+            background: rgba(255,255,255,0.95) !important;
+            border-radius: 8px !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- 区域1：页眉 -->
+    <header class="app-header">
+        <div>
+            <h1>
+                <i>🇺🇸</i> 美国城市人口变迁 · 1790－2000
+            </h1>
+            <div class="subtitle" id="yearSubtitle">选择一个年份，查看人口分布</div>
+        </div>
+        <div style="display: flex; gap: 20px; align-items: center;">
+            <div class="year-selector">
+                <label>📅 年份:</label>
+                <select id="yearSelect">
+                    <!-- 选项由 JS 动态生成 -->
+                </select>
+            </div>
+            <div class="badge">WebGIS课程作业</div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <div class="main-container">
+        <div class="map-area">
+            <div id="viewDiv"></div>
+            <div class="map-controls">
+                <div class="search-box">
+                    <input type="text" id="citySearchInput" placeholder="输入城市名称 (如 New York)..." autocomplete="off">
+                    <button id="citySearchBtn">🔍 搜索</button>
+                </div>
+                <button id="locateBtn" class="locate-btn" title="定位我的位置">📍</button>
+            </div>
+        </div>
+
+        <div class="basemap-sidebar">
+            <h3>🗺️ 切换底图</h3>
+            <div id="basemapGalleryDiv"></div>
+            <p style="font-size:0.8rem; margin-top:20px; color:#aaa; border-top:1px solid #444; padding-top:12px;">
+                💡 提示：使用顶部下拉菜单<br>切换不同年份的人口数据。
+            </p>
+        </div>
+    </div>
+
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/layers/FeatureLayer",
+            "esri/widgets/ScaleBar",
+            "esri/widgets/Legend",
+            "esri/widgets/LayerList",
+            "esri/widgets/BasemapGallery",
+            "esri/widgets/Search",
+            "esri/rest/support/Query"
+        ], (Map, MapView, FeatureLayer, ScaleBar, Legend, LayerList, BasemapGallery, Search, Query) => {
+
+            // ----- 1. 定义要素图层 (注意末尾 /0) -----
+            const citiesLayerUrl = "https://www.geosceneonline.cn/server/rest/services/Hosted/1790－2000年间美国城市人口数量变化/FeatureServer/0";
+
+            // 先创建图层（不设置 definitionExpression，显示全部数据作为默认）
+            const citiesLayer = new FeatureLayer({
+                url: citiesLayerUrl,
+                title: "美国城市人口",
+                // 分级渲染器 —— 根据 population 字段
+                renderer: {
+                    type: "class-breaks",
+                    field: "population",
+                    normalizationField: null,
+                    defaultSymbol: {
+                        type: "simple-marker",
+                        color: "#999999",
+                        size: 8,
+                        outline: { color: "#333", width: 1 }
+                    },
+                    classBreakInfos: [
+                        { minValue: 0, maxValue: 166267, symbol: { type: "simple-marker", color: "#ffffbf", size: 8, outline: { color: "#fff", width: 0.7 } }, label: "≤ 166k" },
+                        { minValue: 166268, maxValue: 471316, symbol: { type: "simple-marker", color: "#fae696", size: 8, outline: { color: "#fff", width: 0.7 } }, label: "166k - 471k" },
+                        { minValue: 471317, maxValue: 1144646, symbol: { type: "simple-marker", color: "#f5bf6e", size: 8, outline: { color: "#fff", width: 0.7 } }, label: "471k - 1.14M" },
+                        { minValue: 1144647, maxValue: 2479015, symbol: { type: "simple-marker", color: "#f08b48", size: 8, outline: { color: "#fff", width: 0.7 } }, label: "1.14M - 2.48M" },
+                        { minValue: 2479016, maxValue: 4766883, symbol: { type: "simple-marker", color: "#eb4b23", size: 8, outline: { color: "#fff", width: 0.7 } }, label: "2.48M - 4.77M" },
+                        { minValue: 4766884, maxValue: 8008278, symbol: { type: "simple-marker", color: "#f50000", size: 8, outline: { color: "#fff", width: 0.7 } }, label: "> 4.77M" }
+                    ]
+                },
+                popupTemplate: {
+                    title: "{place}",
+                    content: [
+                        {
+                            type: "fields",
+                            fieldInfos: [
+                                { fieldName: "place", label: "城市名称" },
+                                { fieldName: "population", label: "人口数量", format: { digitSeparator: true } },
+                                { fieldName: "rank", label: "排名" },
+                                { fieldName: "year", label: "数据年份", format: { dateFormat: "short-date" } }
+                            ]
+                        }
+                    ]
+                },
+                outFields: ["*"]
+            });
+
+            // ----- 2. 创建地图 -----
+            const map = new Map({
+                basemap: "topo-vector",
+                layers: [citiesLayer]
+            });
+
+            // ----- 3. 创建地图视图 -----
+            const view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-98.5795, 39.8282],
+                zoom: 4
+            });
+
+            // ----- 4. 添加微件 -----
+            view.ui.add(new ScaleBar({ view: view, unit: "dual" }), "bottom-left");
+            view.ui.add(new Legend({ view: view }), "bottom-right");
+            view.ui.add(new LayerList({ view: view }), "top-left");
+
+            new BasemapGallery({
+                view: view,
+                container: "basemapGalleryDiv"
+            });
+
+            const searchWidget = new Search({
+                view: view,
+                includeDefaultSources: false,
+                sources: [
+                    {
+                        layer: citiesLayer,
+                        searchFields: ["place"],
+                        displayField: "place",
+                        exactMatch: false,
+                        outFields: ["*"],
+                        name: "美国城市搜索",
+                        placeholder: "输入城市名..."
+                    }
+                ]
+            });
+            view.ui.add(searchWidget, "top-left");
+
+            // ----- 5. 自定义搜索功能 -----
+            const searchInput = document.getElementById("citySearchInput");
+            const searchBtn = document.getElementById("citySearchBtn");
+
+            async function searchCity() {
+                const keyword = searchInput.value.trim();
+                if (!keyword) {
+                    alert("请输入城市名称");
+                    return;
+                }
+                const query = new Query({
+                    where: `place LIKE '%${keyword}%'`,
+                    outFields: ["*"],
+                    returnGeometry: true
+                });
+                try {
+                    const result = await citiesLayer.queryFeatures(query);
+                    if (result.features.length === 0) {
+                        alert(`未找到包含“${keyword}”的城市`);
+                        return;
+                    }
+                    const feature = result.features[0];
+                    const geometry = feature.geometry;
+                    const attrs = feature.attributes;
+                    await view.goTo({ target: geometry, zoom: 12 });
+                    view.openPopup({
+                        title: attrs.place,
+                        content: `人口: ${attrs.population?.toLocaleString() || "无数据"}<br>排名: ${attrs.rank || "—"}<br>年份: ${new Date(attrs.year).toLocaleDateString() || "未知"}`,
+                        location: geometry
+                    });
+                } catch (err) {
+                    console.error("查询失败", err);
+                    alert("搜索失败，请检查网络或图层配置");
+                }
+            }
+
+            searchBtn.addEventListener("click", searchCity);
+            searchInput.addEventListener("keypress", (e) => {
+                if (e.key === "Enter") searchCity();
+            });
+
+            // ----- 6. 定位按钮 -----
+            document.getElementById("locateBtn").addEventListener("click", () => {
+                view.locate({ maxZoom: 14, timeout: 10000 })
+                    .catch(error => alert("无法获取您的位置，请检查浏览器权限"));
+            });
+
+            // ----- 7. 年份选择器逻辑 (替代时间滑块) -----
+            // 生成年份选项 (1790 到 2000，步长10年，覆盖实际数据)
+            const yearSelect = document.getElementById("yearSelect");
+            const startYear = 1790;
+            const endYear = 2000;
+            for (let y = startYear; y <= endYear; y += 10) {
+                const option = document.createElement("option");
+                option.value = y;
+                option.textContent = y;
+                yearSelect.appendChild(option);
+            }
+
+            // 监听年份变化，更新图层过滤条件
+            yearSelect.addEventListener("change", (e) => {
+                const selectedYear = e.target.value;
+                // 根据 year 字段过滤 (year 字段是日期类型，需要转换为时间戳范围)
+                // 简便方法：使用 SQL 表达式 EXTRACT(YEAR FROM year) = selectedYear
+                // 但不同数据源支持度不同，这里使用日期范围更保险
+                const startDate = new Date(selectedYear, 0, 1).getTime();
+                const endDate = new Date(selectedYear, 11, 31).getTime();
+                citiesLayer.definitionExpression = `year >= '${selectedYear}-01-01' AND year <= '${selectedYear}-12-31'`;
+                
+                // 更新副标题
+                document.getElementById("yearSubtitle").innerHTML = 
+                    `当前显示年份: ${selectedYear} | 城市人口分布`;
+            });
+
+            // 设置初始年份为 2000 年 (最新数据)
+            yearSelect.value = "2000";
+            // 触发一次 change 事件以应用初始过滤
+            yearSelect.dispatchEvent(new Event('change'));
+
+            // 地图加载完成
+            view.when(() => {
+                console.log("✅ 美国城市人口变化地图加载完成 (年份选择模式)");
+            });
+        });
+    </script>
+</body>
+</html>
